@@ -1,0 +1,71 @@
+name: build-pack
+
+# Sealed build: rebuild dist/ from src/ with the release-era toolchain and
+# pack the npm tarball. Tests run on Travis (.travis.yml).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-pack:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js 0.10.48
+        run: |
+          curl -fsSL https://nodejs.org/dist/v0.10.48/node-v0.10.48-linux-x64.tar.xz -o "$RUNNER_TEMP/node.tar.xz"
+          tar -xJf "$RUNNER_TEMP/node.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/node-v0.10.48-linux-x64/bin" >> "$GITHUB_PATH"
+
+      - name: Install faketime
+        run: sudo apt-get update && sudo apt-get install -y faketime
+
+      - name: Install devDependencies (as of the 1.11.1 release date)
+        run: |
+          node -v
+          npm -v
+          npm config set registry "https://:2014-05-01T18%3A05%3A32.863Z@time-machines-npm.sealsecurity.io/"
+          npm install
+          # build/release.js dependency, used to generate dist/cdn
+          npm install shelljs@0.2.6
+
+      # The build embeds the current date in dist/jquery.js ("Date:") and the
+      # current year in the dist/jquery.min.js banner; pin both to the release.
+      - name: Build dist from src (grunt)
+        env:
+          TZ: UTC
+        run: faketime '2014-05-01 17:42:00' ./node_modules/.bin/grunt
+
+      - name: Generate dist/cdn copies (build/release.js)
+        run: |
+          node -e '
+            var Release = {
+              newVersion: require( "./package.json" ).version,
+              preRelease: false,
+              complete: function() {},
+              exec: function( cmd ) { console.log( "Skipping Release.exec(" + cmd + "): dist already built" ); },
+              define: function( props ) { for ( var k in props ) { Release[ k ] = props[ k ]; } }
+            };
+            require( "./build/release.js" )( Release );
+            Release.generateArtifacts( function( files ) {
+              console.log( "Release artifacts: " + files.join( ", " ) );
+            } );
+          '
+          ls -l dist dist/cdn
+
+      # .github/ is CI-only (not in the published tarball and not listed in
+      # .npmignore, which itself ships in the tarball): drop it before packing.
+      - name: Pack
+        run: |
+          rm -rf .github
+          npm pack
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jquery-npm-package
+          path: jquery-*.tgz
+          if-no-files-found: error

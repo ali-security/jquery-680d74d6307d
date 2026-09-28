@@ -1,3 +1,20 @@
 language: node_js
 node_js:
 - '0.10'
+dist: focal
+addons:
+  chrome: stable
+script:
+- npm test
+# Sealed build: run the QUnit browser suite (test/index.html) in headless Chrome.
+# The ajax tests need PHP: use the image's phpenv PHP 8.x. Several PHP workers
+# because test/data/core/dont_return.php sleeps 30s and would block a
+# single-threaded dev server.
+- phpenv global 8.3 2>/dev/null || phpenv global $(phpenv versions --bare | grep '^8' | tail -1)
+- php -v
+- PHP_CLI_SERVER_WORKERS=8 php -S 127.0.0.1:8000 -t "$TRAVIS_BUILD_DIR" > /tmp/php-server.log 2>&1 &
+- bash -c 'for i in $(seq 1 30); do curl -sf -o /dev/null http://127.0.0.1:8000/test/index.html && exit 0; sleep 1; done; cat /tmp/php-server.log; exit 1'
+# puppeteer-core needs Node >= 18: install it outside the project (node 0.10) tree.
+- bash -c 'source ~/.nvm/nvm.sh && nvm install 18 && mkdir -p /tmp/qrunner && cd /tmp/qrunner && npm init -y >/dev/null && npm install --no-audit --no-fund puppeteer-core@21 && php -v && google-chrome-stable --version && NODE_PATH=/tmp/qrunner/node_modules node "$TRAVIS_BUILD_DIR/.github/scripts/qunit-headless.js" http://127.0.0.1:8000/test/index.html'
+after_script:
+- tail -n 50 /tmp/php-server.log
