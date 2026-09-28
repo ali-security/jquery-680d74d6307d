@@ -60,6 +60,112 @@ module( "ajax", {
 		}
 	});
 
+	ajaxTest( "jQuery.ajax() - do not execute js (crossOrigin)", 2, {
+		create: function( options ) {
+			options.crossDomain = true;
+			return jQuery.ajax( url("data/script.php?header=ecma"), options );
+		},
+		success: function() {
+			ok( true, "success" );
+		},
+		complete: function() {
+			ok( true, "complete" );
+		}
+	});
+
+	ajaxTest( "jQuery.ajax() - execute js for crossOrigin when dataType option is provided", 3, {
+		create: function( options ) {
+			options.crossDomain = true;
+			options.dataType = "script";
+			return jQuery.ajax( url("data/script.php?header=ecma"), options );
+		},
+		success: function() {
+			ok( true, "success" );
+		},
+		complete: function() {
+			ok( true, "complete" );
+		}
+	});
+
+	ajaxTest( "jQuery.ajax() - do not execute js (crossOrigin)", 2, {
+		create: function( options ) {
+			options.crossDomain = true;
+			return jQuery.ajax( url("data/script.php"), options );
+		},
+		success: function() {
+			ok( true, "success" );
+		},
+		complete: function() {
+			ok( true, "complete" );
+		}
+	});
+
+	ajaxTest( "jQuery.ajax() - do not execute js for cross-origin urls missed by crossDomain detection", 8, function() {
+		function request( url, title, crossOrigin, options ) {
+			return jQuery.extend( {
+				url: url,
+				beforeSend: function( _, s ) {
+					if ( crossOrigin ) {
+						strictEqual( s.contents.script, false, title );
+					} else {
+						strictEqual( s.contents.script, jQuery.ajaxSettings.contents.script, title );
+					}
+					return false;
+				},
+				error: true
+			}, options );
+		}
+
+		var loc = document.location;
+
+		return {
+			requests: [
+				request(
+					"\\\\example.invalid/data/script.php?header=ecma",
+					"Backslash scheme-relative url is treated as cross-origin",
+					true
+				),
+				request(
+					"/\\example.invalid/data/script.php?header=ecma",
+					"Mixed slash scheme-relative url is treated as cross-origin",
+					true
+				),
+				request(
+					loc.protocol + "//example.invalid\\@" + loc.host + "/data/script.php?header=ecma",
+					"Backslash-terminated authority is treated as cross-origin",
+					true
+				),
+				request(
+					" " + loc.protocol + "//example.invalid/data/script.php?header=ecma",
+					"Url with leading whitespace is treated as cross-origin",
+					true
+				),
+				request(
+					"data/script.php?header=ecma",
+					"Relative url keeps script auto-detection",
+					false
+				),
+				request(
+					loc.protocol + "//" + loc.host + "/data/script.php?header=ecma",
+					"Same-origin absolute url keeps script auto-detection",
+					false
+				),
+				request(
+					loc.protocol + "//example.invalid/data/script.php?header=ecma",
+					"Explicit crossDomain: false is respected",
+					false,
+					{
+						crossDomain: false
+					}
+				)
+			],
+			teardown: function() {
+				ok( jQuery.ajaxSettings.contents.script instanceof RegExp,
+					"Global script contents setting is left untouched" );
+			}
+		};
+	});
+
 	ajaxTest( "jQuery.ajax() - success callbacks (late binding)", 8, {
 		setup: addGlobalEvents("ajaxStart ajaxStop ajaxSend ajaxComplete ajaxSuccess"),
 		url: url("data/name.html"),

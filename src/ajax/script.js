@@ -3,6 +3,55 @@ define([
 	"../ajax"
 ], function( jQuery ) {
 
+var originAnchor = document.createElement( "a" );
+
+// #8138, IE may throw an exception when accessing
+// a field from window.location if document.domain has been set
+try {
+	originAnchor.href = location.href;
+} catch( e ) {
+	originAnchor.href = "";
+}
+
+// Support: IE8-11+
+// Anchor's host property isn't correctly set when the href is relative
+originAnchor.href = originAnchor.href;
+
+// Prevent auto-execution of scripts when no explicit dataType was provided (See gh-2432)
+jQuery.ajaxPrefilter(function( s, origOptions ) {
+	var urlAnchor,
+		crossDomain = s.crossDomain;
+
+	// The protocol:host:port crossDomain detection can miss urls the browser
+	// resolves to another origin (e.g. "\\example.com/"); unless crossDomain was
+	// set explicitly, double-check the origin with the browser's own url parser
+	if ( !crossDomain && origOptions.crossDomain == null &&
+		jQuery.ajaxSettings.crossDomain == null ) {
+
+		urlAnchor = document.createElement( "a" );
+
+		// Support: IE8-11+
+		// IE throws exception if url is malformed, e.g. http://example.com:80x/
+		try {
+			urlAnchor.href = s.url;
+
+			// Support: IE8-11+
+			// Anchor's host property isn't correctly set when s.url is relative
+			urlAnchor.href = urlAnchor.href;
+			crossDomain = originAnchor.protocol + "//" + originAnchor.host !==
+				urlAnchor.protocol + "//" + urlAnchor.host;
+		} catch( e ) {
+
+			// If there is an error parsing the URL, assume it is crossDomain
+			crossDomain = true;
+		}
+	}
+
+	if ( crossDomain ) {
+		s.contents.script = false;
+	}
+});
+
 // Install script dataType
 jQuery.ajaxSetup({
 	accepts: {
